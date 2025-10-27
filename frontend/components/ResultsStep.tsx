@@ -26,7 +26,7 @@ export default function ResultsStep({ onReset }: ResultsStepProps) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-600">결과를 불러올 수 없습니다.</p>
+          <p className="text-gray-600">Unable to load results.</p>
         </div>
       </div>
     )
@@ -42,10 +42,10 @@ export default function ResultsStep({ onReset }: ResultsStepProps) {
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            평가 결과
+            Evaluation Results
           </h1>
           <p className="text-gray-600">
-            학번: <span className="font-semibold">{studentId}</span> | 과목:{' '}
+            Student ID: <span className="font-semibold">{studentId}</span> | Course:{' '}
             <span className="font-semibold">{courseCode}</span>
           </p>
         </div>
@@ -86,12 +86,12 @@ export default function ResultsStep({ onReset }: ResultsStepProps) {
               <div className="mt-4 text-center">
                 <p className="text-sm font-semibold text-gray-900">
                   {scorePercentage >= 80
-                    ? '우수 🌟'
+                    ? 'Excellent 🌟'
                     : scorePercentage >= 60
-                      ? '양호 ✅'
+                      ? 'Good ✅'
                       : scorePercentage >= 40
-                        ? '개선 필요 ⚠️'
-                        : '미흡 ❌'}
+                        ? 'Needs Improvement ⚠️'
+                        : 'Poor ❌'}
                 </p>
               </div>
             </div>
@@ -100,40 +100,40 @@ export default function ResultsStep({ onReset }: ResultsStepProps) {
             <div className="space-y-4">
               <div>
                 <h3 className="text-sm font-semibold text-gray-600 mb-2">
-                  기술적 위험도
+                  Technical Risk
                 </h3>
                 <div
                   className={`${getRiskColor(feedback.technical_risk || 'medium')} border rounded-lg p-4 text-center font-semibold`}
                 >
                   {feedback.technical_risk === 'low'
-                    ? '🟢 낮음'
+                    ? '🟢 Low'
                     : feedback.technical_risk === 'high'
-                      ? '🔴 높음'
-                      : '🟡 중간'}
+                      ? '🔴 High'
+                      : '🟡 Medium'}
                 </div>
               </div>
 
               <div>
                 <h3 className="text-sm font-semibold text-gray-600 mb-2">
-                  평가 요약
+                  Assessment Summary
                 </h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between p-2 bg-gray-50 rounded">
-                    <span className="text-gray-600">강점 항목</span>
+                    <span className="text-gray-600">Strengths</span>
                     <span className="font-semibold text-green-600">
-                      {feedback.strengths?.length || 0}개
+                      {feedback.strengths?.length || 0}
                     </span>
                   </div>
                   <div className="flex justify-between p-2 bg-gray-50 rounded">
-                    <span className="text-gray-600">개선 필요</span>
+                    <span className="text-gray-600">Areas for Improvement</span>
                     <span className="font-semibold text-orange-600">
-                      {feedback.weaknesses?.length || 0}개
+                      {feedback.weaknesses?.length || 0}
                     </span>
                   </div>
                   <div className="flex justify-between p-2 bg-gray-50 rounded">
-                    <span className="text-gray-600">개선 단계</span>
+                    <span className="text-gray-600">Improvement Steps</span>
                     <span className="font-semibold text-blue-600">
-                      {feedback.improvement_steps?.length || 0}단계
+                      {feedback.improvement_steps?.length || 0}
                     </span>
                   </div>
                 </div>
@@ -146,7 +146,7 @@ export default function ResultsStep({ onReset }: ResultsStepProps) {
         {feedback.strengths && feedback.strengths.length > 0 && (
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
             <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
-              <span className="text-2xl mr-2">✅ 강점</span>
+              <span className="text-2xl mr-2">✅ Strengths</span>
             </h2>
             <ul className="space-y-3">
               {feedback.strengths.map((strength: string, idx: number) => (
@@ -168,7 +168,7 @@ export default function ResultsStep({ onReset }: ResultsStepProps) {
         {feedback.weaknesses && feedback.weaknesses.length > 0 && (
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
             <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
-              <span className="text-2xl mr-2">📌 개선 필요 사항</span>
+              <span className="text-2xl mr-2">📌 Areas for Improvement</span>
             </h2>
             <ul className="space-y-3">
               {feedback.weaknesses.map((weakness: string, idx: number) => (
@@ -190,7 +190,7 @@ export default function ResultsStep({ onReset }: ResultsStepProps) {
         {feedback.improvement_steps && feedback.improvement_steps.length > 0 && (
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
             <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
-              <span className="text-2xl mr-2">🚀 개선 방안</span>
+              <span className="text-2xl mr-2">🚀 Improvement Plan</span>
             </h2>
             <ol className="space-y-3">
               {feedback.improvement_steps.map(
@@ -216,13 +216,13 @@ export default function ResultsStep({ onReset }: ResultsStepProps) {
             onClick={onReset}
             className="px-8 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors duration-200"
           >
-            새로운 평가 시작
+            Start New Evaluation
           </button>
           <button
             onClick={() => window.print()}
             className="px-8 py-3 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-100 transition-colors duration-200"
           >
-            평가 결과 인쇄
+            Print Results
           </button>
         </div>
       </div>

@@ -43,7 +43,7 @@ export default function Home() {
       setEvaluationResult(result)
       setCurrentStep('results')
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '평가 중 오류가 발생했습니다.'
+      const errorMsg = err instanceof Error ? err.message : 'An error occurred during evaluation.'
       setError(errorMsg)
       console.error('Evaluation error:', err)
     } finally {
@@ -64,10 +64,10 @@ export default function Home() {
           <div className="max-w-4xl mx-auto px-4 py-6">
             <div className="flex items-center justify-between">
               {[
-                { step: 'login', label: '로그인', icon: '👤' },
-                { step: 'rubric', label: '루브릭 선택', icon: '✓' },
-                { step: 'upload', label: '자료 업로드', icon: '📁' },
-                { step: 'evaluating', label: '평가 진행중', icon: '⚙️' },
+                { step: 'login', label: 'Login', icon: '👤' },
+                { step: 'rubric', label: 'Select Rubrics', icon: '✓' },
+                { step: 'upload', label: 'Upload', icon: '📁' },
+                { step: 'evaluating', label: 'Evaluating', icon: '⚙️' },
               ].map((item, idx, arr) => (
                 <div key={item.step} className="flex items-center flex-1">
                   <div
@@ -135,10 +135,10 @@ export default function Home() {
                 <span className="text-3xl">⚙️</span>
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                AI 평가 진행 중...
+                AI Evaluation in Progress...
               </h2>
               <p className="text-gray-600">
-                Gemini가 프로젝트를 분석하고 있습니다. 잠시만 기다려주세요.
+                Gemini is analyzing your project. Please wait.
               </p>
             </div>
           </div>
@@ -152,7 +152,7 @@ export default function Home() {
       {/* Error Toast */}
       {error && (
         <div className="fixed bottom-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg max-w-md">
-          <p className="font-semibold">오류 발생</p>
+          <p className="font-semibold">Error</p>
           <p className="text-sm mt-1">{error}</p>
         </div>
       )}
@@ -164,7 +164,7 @@ export default function Home() {
             <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-4 animate-spin">
               <span>⚙️</span>
             </div>
-            <p className="text-gray-900 font-semibold">처리 중...</p>
+            <p className="text-gray-900 font-semibold">Processing...</p>
           </div>
         </div>
       )}

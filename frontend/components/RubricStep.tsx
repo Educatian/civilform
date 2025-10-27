@@ -18,10 +18,10 @@ export default function RubricStep({ onNext, onBack }: RubricStepProps) {
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            평가 루브릭 선택
+            Select Evaluation Rubrics
           </h1>
           <p className="text-gray-600">
-            프로젝트 평가에 포함할 항목을 선택하세요 (최소 1개 필수)
+            Choose the evaluation items to include in your project assessment (minimum 1 required)
           </p>
         </div>
 
@@ -39,7 +39,7 @@ export default function RubricStep({ onNext, onBack }: RubricStepProps) {
                     {category}
                   </h2>
                   <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-                    {categoryCount} / {rubrics.length} 선택
+                    {categoryCount} / {rubrics.length} selected
                   </span>
                 </div>
 
@@ -76,14 +76,14 @@ export default function RubricStep({ onNext, onBack }: RubricStepProps) {
             onClick={onBack}
             className="px-6 py-2 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-100 transition-colors duration-200"
           >
-            ← 이전
+            ← Back
           </button>
           <button
             onClick={onNext}
             disabled={!hasSelection}
             className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
           >
-            다음 단계로 진행 →
+            Next Step →
           </button>
         </div>
       </div>
