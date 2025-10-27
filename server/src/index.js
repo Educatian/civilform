@@ -6,7 +6,7 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 
-// Import Autodesk and Gemini utilities
+// Import utilities
 const {
   getAccessToken,
   createOSSBucket,
@@ -18,11 +18,28 @@ const {
 } = require('./lib/autodesk');
 
 const { getGeminiVisionFeedback } = require('./lib/gemini');
+const RevitAnalyzer = require('./lib/revit-analyzer');
+const {
+  Logger,
+  Errors,
+  errorHandler,
+  asyncHandler,
+  requestIdMiddleware,
+  performanceMiddleware,
+  validateRequest
+} = require('./lib/error-handler');
 
 const app = express();
+
+// =============================================
+// MIDDLEWARE
+// =============================================
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(requestIdMiddleware);
+app.use(performanceMiddleware);
 
 // Multer configuration for file uploads
 const upload = multer({
@@ -37,7 +54,7 @@ const upload = multer({
     if (allowed.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Only Revit files are allowed (.rvt, .rfa, .adt).'));
+      cb(Errors.InvalidFormat(`Only Revit files are allowed (.rvt, .rfa, .adt). Got: ${ext}`));
     }
   }
 });
@@ -49,82 +66,81 @@ const conversionJobs = new Map();
 // HEALTH CHECK
 // =============================================
 
-app.get('/health', async (_req, res) => {
+app.get('/health', asyncHandler(async (_req, res) => {
   try {
     // Verify Autodesk token can be obtained
     const token = await getAccessToken();
+    
+    Logger.info('HEALTH', 'Health check passed');
+    
     res.json({ 
       ok: true, 
       message: 'Server running with Autodesk API',
-      autodesk: token ? 'connected' : 'disconnected'
+      autodesk: token ? 'connected' : 'disconnected',
+      timestamp: new Date().toISOString()
     });
   } catch (err) {
-    console.error('[SERVER] Health check error:', err.message);
-    res.status(503).json({ 
-      ok: false, 
-      error: err.message 
-    });
+    Logger.error('HEALTH', 'Health check failed', err);
+    throw Errors.ServiceUnavailable('Autodesk API unavailable', { error: err.message });
   }
-});
+}));
 
 // =============================================
 // AI EVALUATION ENDPOINT
 // =============================================
 
-app.post('/evaluate', upload.array('images', 3), async (req, res) => {
+app.post('/evaluate', upload.array('images', 3), asyncHandler(async (req, res) => {
+  const { studentId, courseCode, selfDescription } = req.body;
+  const files = Array.isArray(req.files) ? req.files : [];
+
+  Logger.info('EVALUATE', 'Request received', {
+    studentId,
+    courseCode,
+    filesCount: files.length,
+    requestId: req.id
+  });
+
+  // Validate required fields
   try {
-    const { studentId, courseCode, selfDescription } = req.body;
-    const files = Array.isArray(req.files) ? req.files : [];
-
-    console.log('\n[EVALUATE] Request received');
-    console.log(`  Student: ${studentId}, Course: ${courseCode}`);
-    console.log(`  Description: ${selfDescription?.length || 0} chars`);
-    console.log(`  Files: ${files.length}`);
-
-    // Validation
-    if (!studentId || !courseCode || !selfDescription || files.length === 0) {
-      return res.status(400).json({
-        error: 'Missing required fields: studentId, courseCode, selfDescription, images'
-      });
-    }
-
-    if (selfDescription.length < 20) {
-      return res.status(400).json({
-        error: 'Self-description must be at least 20 characters'
-      });
-    }
-
-    // Convert file buffers to image data for Gemini
-    const imageData = files.map(f => ({
-      data: f.buffer.toString('base64'),
-      mimeType: 'image/jpeg' // Adjust based on actual file type
-    }));
-
-    // Call Gemini Vision for AI feedback
-    console.log('[EVALUATE] Calling Gemini Vision API...');
-    const aiFeedback = await getGeminiVisionFeedback(
-      selfDescription,
-      imageData
-    );
-
-    const responseData = {
-      ok: true,
-      score: aiFeedback.score,
-      strengths: aiFeedback.strengths,
-      weaknesses: aiFeedback.weaknesses,
-      aiFeedback: aiFeedback,
-      docId: `eval_${studentId}_${Date.now()}`,
-      timestamp: new Date().toISOString()
-    };
-
-    console.log(`[EVALUATE] ✅ Complete - Score: ${aiFeedback.score}/100\n`);
-    res.json(responseData);
-
+    validateRequest(['studentId', 'courseCode', 'selfDescription'], req.body);
   } catch (err) {
-    console.error('[EVALUATE] Error:', err.message);
-    res.status(500).json({ error: err.message });
+    throw err;
   }
-});
+
+  if (files.length === 0) {
+    throw Errors.BadRequest('At least one image file is required');
+  }
+
+  if (selfDescription.length < 20) {
+    throw Errors.BadRequest('Self-description must be at least 20 characters');
+  }
+
+  // Convert file buffers to image data for Gemini
+  const imageData = files.map(f => ({
+    data: f.buffer.toString('base64'),
+    mimeType: 'image/jpeg' // Adjust based on actual file type
+  }));
+
+  // Call Gemini Vision for AI feedback
+  Logger.info('EVALUATE', 'Calling Gemini Vision API...');
+  const aiFeedback = await getGeminiVisionFeedback(
+    selfDescription,
+    imageData
+  );
+
+  const responseData = {
+    ok: true,
+    score: aiFeedback.score,
+    strengths: aiFeedback.strengths,
+    weaknesses: aiFeedback.weaknesses,
+    aiFeedback: aiFeedback,
+    docId: `eval_${studentId}_${Date.now()}`,
+    timestamp: new Date().toISOString()
+  };
+
+  Logger.info('EVALUATE', `✅ Complete - Score: ${aiFeedback.score}/100`);
+  res.json(responseData);
+}));
 
 // =============================================
 // REVIT FILE CONVERSION ENDPOINTS
@@ -132,183 +148,249 @@ app.post('/evaluate', upload.array('images', 3), async (req, res) => {
 
 /**
  * POST /convert
- * Upload Revit files and submit conversion jobs
+ * Upload Revit files, analyze, and submit conversion jobs
  */
-app.post('/convert', upload.array('images', 3), async (req, res) => {
-  try {
-    const { studentId, courseCode } = req.body;
-    const files = Array.isArray(req.files) ? req.files : [];
+app.post('/convert', upload.array('images', 3), asyncHandler(async (req, res) => {
+  const { studentId, courseCode } = req.body;
+  const files = Array.isArray(req.files) ? req.files : [];
 
-    console.log('\n[CONVERT] Upload & submit request');
-    console.log(`  Student: ${studentId}, Course: ${courseCode}`);
-    console.log(`  Files to convert: ${files.length}`);
+  Logger.info('CONVERT', 'Upload & submit request', {
+    studentId,
+    courseCode,
+    filesCount: files.length,
+    requestId: req.id
+  });
 
-    if (!files.length) {
-      return res.status(400).json({ error: 'No files uploaded' });
-    }
-
-    // Initialize bucket (create if not exists)
-    const bucketKey = process.env.AUTODESK_OSS_BUCKET_KEY;
-    console.log(`[CONVERT] Initializing bucket: ${bucketKey}`);
-    await createOSSBucket(bucketKey, 'temporary');
-
-    // Upload files and create conversion jobs
-    const jobs = [];
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      console.log(`[CONVERT] Uploading file ${i + 1}/${files.length}: ${file.originalname}`);
-
-      // Upload to OSS
-      const { urn } = await uploadToOSS(
-        bucketKey,
-        file.originalname,
-        file.buffer
-      );
-
-      // Submit conversion job
-      const job = await submitDerivativeJob(urn, ['ifc', 'pdf']);
-
-      const jobRecord = {
-        jobId: `job_${studentId}_${Date.now()}_${i}`,
-        fileName: file.originalname,
-        fileSize: file.size,
-        urn,
-        status: 'submitted',
-        formats: ['ifc', 'pdf'],
-        createdAt: new Date().toISOString()
-      };
-
-      jobs.push(jobRecord);
-      conversionJobs.set(jobRecord.jobId, jobRecord);
-
-      console.log(`[CONVERT] ✅ Job created: ${jobRecord.jobId}`);
-    }
-
-    console.log(`[CONVERT] ✅ ${jobs.length} job(s) submitted\n`);
-
-    res.json({
-      ok: true,
-      jobs,
-      message: `${jobs.length} file(s) submitted for conversion`
-    });
-
-  } catch (err) {
-    console.error('[CONVERT] Error:', err.message);
-    res.status(500).json({ error: err.message });
+  if (!files.length) {
+    throw Errors.BadRequest('No files uploaded');
   }
-});
+
+  try {
+    validateRequest(['studentId', 'courseCode'], req.body);
+  } catch (err) {
+    throw err;
+  }
+
+  // Initialize bucket (create if not exists)
+  const bucketKey = process.env.AUTODESK_OSS_BUCKET_KEY;
+  Logger.info('CONVERT', `Initializing bucket: ${bucketKey}`);
+  
+  await createOSSBucket(bucketKey, 'temporary');
+
+  // Upload files and create conversion jobs
+  const jobs = [];
+  const analyses = [];
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    Logger.info('CONVERT', `Analyzing file ${i + 1}/${files.length}: ${file.originalname}`);
+
+    // Analyze Revit file
+    const analysis = RevitAnalyzer.analyzeFile(file.buffer, file.originalname);
+    analyses.push(RevitAnalyzer.generateReport(analysis));
+
+    // Check if file analysis passed
+    if (analysis.warnings.length > 0) {
+      Logger.warn('CONVERT', `File analysis warnings for ${file.originalname}`, analysis.warnings);
+    }
+
+    Logger.info('CONVERT', `Uploading file ${i + 1}/${files.length}: ${file.originalname}`);
+
+    // Upload to OSS
+    const { urn } = await uploadToOSS(
+      bucketKey,
+      file.originalname,
+      file.buffer
+    );
+
+    Logger.info('CONVERT', `File uploaded. Submitting conversion job...`);
+
+    // Submit conversion job
+    const job = await submitDerivativeJob(urn, ['ifc', 'pdf']);
+
+    const jobRecord = {
+      jobId: `job_${studentId}_${Date.now()}_${i}`,
+      fileName: file.originalname,
+      fileSize: file.size,
+      urn,
+      status: 'submitted',
+      formats: ['ifc', 'pdf'],
+      analysis: analysis,
+      createdAt: new Date().toISOString()
+    };
+
+    jobs.push(jobRecord);
+    conversionJobs.set(jobRecord.jobId, jobRecord);
+
+    Logger.info('CONVERT', `✅ Job created: ${jobRecord.jobId}`);
+  }
+
+  Logger.info('CONVERT', `✅ ${jobs.length} job(s) submitted`);
+
+  res.json({
+    ok: true,
+    jobs,
+    analyses,
+    message: `${jobs.length} file(s) submitted for conversion`
+  });
+}));
 
 /**
  * GET /convert/:jobId
- * Check conversion job status
+ * Check conversion job status and get file analysis
  */
-app.get('/convert/:jobId', async (req, res) => {
-  try {
-    const { jobId } = req.params;
-    const job = conversionJobs.get(jobId);
+app.get('/convert/:jobId', asyncHandler(async (req, res) => {
+  const { jobId } = req.params;
+  const job = conversionJobs.get(jobId);
 
-    if (!job) {
-      return res.status(404).json({ error: `Job not found: ${jobId}` });
-    }
-
-    console.log(`[STATUS] Checking job: ${jobId}`);
-
-    // Check status with Autodesk API
-    const manifest = await checkJobStatus(job.urn);
-
-    const statusResponse = {
-      jobId,
-      fileName: job.fileName,
-      status: manifest.status === 'success' ? 'completed' : 'inprogress',
-      autodesk_status: manifest.status,
-      progress: parseInt(manifest.progress) || 0,
-      message: `Conversion ${manifest.status} (${manifest.progress})`,
-      derivatives: manifest.derivatives || []
-    };
-
-    // Update job record
-    job.status = statusResponse.status;
-    job.progress = statusResponse.progress;
-
-    console.log(`[STATUS] ${jobId}: ${statusResponse.autodesk_status} (${statusResponse.progress}%)`);
-
-    res.json(statusResponse);
-
-  } catch (err) {
-    console.error('[STATUS] Error:', err.message);
-    res.status(500).json({ error: err.message });
+  if (!job) {
+    throw Errors.JobNotFound(`Job not found: ${jobId}`);
   }
-});
+
+  Logger.info('STATUS', `Checking job: ${jobId}`);
+
+  // Check status with Autodesk API
+  const manifest = await checkJobStatus(job.urn);
+
+  const statusResponse = {
+    jobId,
+    fileName: job.fileName,
+    fileSize: job.fileSize,
+    status: manifest.status === 'success' ? 'completed' : 'inprogress',
+    autodesk_status: manifest.status,
+    progress: parseInt(manifest.progress) || 0,
+    message: `Conversion ${manifest.status} (${manifest.progress})`,
+    derivatives: manifest.derivatives || [],
+    analysis: job.analysis ? RevitAnalyzer.generateReport(job.analysis) : null
+  };
+
+  // Update job record
+  job.status = statusResponse.status;
+  job.progress = statusResponse.progress;
+
+  Logger.info('STATUS', `${jobId}: ${statusResponse.autodesk_status} (${statusResponse.progress}%)`);
+
+  res.json(statusResponse);
+}));
 
 /**
  * GET /convert/:jobId/:format
  * Download converted file (ifc or pdf)
  */
-app.get('/convert/:jobId/:format', async (req, res) => {
-  try {
-    const { jobId, format } = req.params;
-    const job = conversionJobs.get(jobId);
+app.get('/convert/:jobId/:format', asyncHandler(async (req, res) => {
+  const { jobId, format } = req.params;
+  const job = conversionJobs.get(jobId);
 
-    if (!job) {
-      return res.status(404).json({ error: `Job not found: ${jobId}` });
-    }
-
-    console.log(`[DOWNLOAD] Requesting ${format} for ${jobId}`);
-
-    // Check if conversion is complete
-    const manifest = await checkJobStatus(job.urn);
-    
-    if (manifest.status !== 'success') {
-      return res.status(202).json({
-        message: 'Conversion in progress',
-        status: manifest.status,
-        progress: parseInt(manifest.progress) || 0
-      });
-    }
-
-    // Get download URL
-    const downloadUrl = await getDerivativeUrl(job.urn, format);
-
-    console.log(`[DOWNLOAD] ✅ ${format} ready for ${jobId}`);
-
-    res.json({
-      ok: true,
-      jobId,
-      format,
-      downloadUrl: downloadUrl.downloadUrl,
-      status: 'ready'
-    });
-
-  } catch (err) {
-    console.error('[DOWNLOAD] Error:', err.message);
-    res.status(500).json({ error: err.message });
+  if (!job) {
+    throw Errors.JobNotFound(`Job not found: ${jobId}`);
   }
+
+  // Validate format
+  if (!['ifc', 'pdf'].includes(format)) {
+    throw Errors.BadRequest(`Invalid format: ${format}. Allowed: ifc, pdf`);
+  }
+
+  Logger.info('DOWNLOAD', `Requesting ${format} for ${jobId}`);
+
+  // Check if conversion is complete
+  const manifest = await checkJobStatus(job.urn);
+  
+  if (manifest.status !== 'success') {
+    return res.status(202).json({
+      message: 'Conversion in progress',
+      status: manifest.status,
+      progress: parseInt(manifest.progress) || 0,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  // Get download URL
+  const downloadUrl = await getDerivativeUrl(job.urn, format);
+
+  Logger.info('DOWNLOAD', `✅ ${format} ready for ${jobId}`);
+
+  res.json({
+    ok: true,
+    jobId,
+    fileName: job.fileName,
+    format,
+    downloadUrl: downloadUrl.downloadUrl,
+    status: 'ready',
+    timestamp: new Date().toISOString()
+  });
+}));
+
+// =============================================
+// REVIT FILE ANALYSIS ENDPOINT
+// =============================================
+
+/**
+ * POST /analyze
+ * Analyze Revit file without conversion
+ */
+app.post('/analyze', upload.array('images', 3), asyncHandler(async (req, res) => {
+  const files = Array.isArray(req.files) ? req.files : [];
+
+  Logger.info('ANALYZE', `Analyzing ${files.length} file(s)`);
+
+  if (files.length === 0) {
+    throw Errors.BadRequest('No files provided for analysis');
+  }
+
+  const analyses = files.map(file => {
+    const analysis = RevitAnalyzer.analyzeFile(file.buffer, file.originalname);
+    return RevitAnalyzer.generateReport(analysis);
+  });
+
+  res.json({
+    ok: true,
+    analyses,
+    timestamp: new Date().toISOString()
+  });
+}));
+
+// =============================================
+// 404 HANDLER
+// =============================================
+
+app.use((_req, _res) => {
+  throw Errors.BadRequest('Endpoint not found');
 });
 
 // =============================================
 // ERROR HANDLING
 // =============================================
 
-app.use((err, _req, res, _next) => {
-  console.error('[ERROR]', err);
-  res.status(500).json({
-    error: err.message || 'Internal server error'
-  });
-});
+app.use(errorHandler);
 
 // =============================================
 // START SERVER
 // =============================================
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`\n🚀 CivilFo Evaluation Server running on http://localhost:${PORT}`);
-  console.log(`\n📝 Endpoints:`);
-  console.log(`   - POST http://localhost:${PORT}/evaluate (Gemini AI Evaluation)`);
-  console.log(`   - POST http://localhost:${PORT}/convert (Submit Revit files)`);
-  console.log(`   - GET  http://localhost:${PORT}/convert/:jobId (Check status)`);
-  console.log(`   - GET  http://localhost:${PORT}/convert/:jobId/:format (Download IFC/PDF)`);
-  console.log(`\n💚 Health: GET http://localhost:${PORT}/health\n`);
+const server = app.listen(PORT, () => {
+  Logger.info('SERVER', `🚀 CivilFo Evaluation Server running on http://localhost:${PORT}`);
+  Logger.info('SERVER', `📝 Endpoints:`);
+  Logger.info('SERVER', `   - POST http://localhost:${PORT}/evaluate (Gemini AI Evaluation)`);
+  Logger.info('SERVER', `   - POST http://localhost:${PORT}/convert (Submit Revit files)`);
+  Logger.info('SERVER', `   - GET  http://localhost:${PORT}/convert/:jobId (Check status)`);
+  Logger.info('SERVER', `   - GET  http://localhost:${PORT}/convert/:jobId/:format (Download IFC/PDF)`);
+  Logger.info('SERVER', `   - POST http://localhost:${PORT}/analyze (Analyze files)`);
+  Logger.info('SERVER', `   - GET  http://localhost:${PORT}/health (Health check)`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  Logger.warn('SERVER', 'SIGTERM received, shutting down gracefully...');
+  server.close(() => {
+    Logger.info('SERVER', 'Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  Logger.warn('SERVER', 'SIGINT received, shutting down...');
+  process.exit(0);
 });
 
 module.exports = app;
