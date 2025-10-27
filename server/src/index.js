@@ -49,12 +49,49 @@ const upload = multer({
     fileSize: 100 * 1024 * 1024 // 100 MB per file
   },
   fileFilter: (_req, file, cb) => {
-    const allowed = ['.rvt', '.rfa', '.adt'];
     const ext = path.extname(file.originalname).toLowerCase();
+    // Accept both images and Revit files - specific validation per endpoint
+    const allowed = ['.rvt', '.rfa', '.adt', '.jpg', '.jpeg', '.png', '.webp', '.gif'];
     if (allowed.includes(ext)) {
       cb(null, true);
     } else {
-      cb(Errors.InvalidFormat(`Only Revit files are allowed (.rvt, .rfa, .adt). Got: ${ext}`));
+      cb(Errors.InvalidFormat(`Invalid file format: ${ext}. Allowed: .rvt, .rfa, .adt, .jpg, .jpeg, .png, .webp, .gif`));
+    }
+  }
+});
+
+// Separate multer for evaluate endpoint (images only)
+const uploadImages = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    files: 3,
+    fileSize: 50 * 1024 * 1024 // 50 MB per image
+  },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const allowedImages = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+    if (allowedImages.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(Errors.InvalidFormat(`Only image files allowed (.jpg, .jpeg, .png, .webp, .gif). Got: ${ext}`));
+    }
+  }
+});
+
+// Separate multer for convert endpoint (Revit files only)
+const uploadRevit = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    files: 3,
+    fileSize: 100 * 1024 * 1024 // 100 MB per file
+  },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const allowedRevit = ['.rvt', '.rfa', '.adt'];
+    if (allowedRevit.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(Errors.InvalidFormat(`Only Revit files allowed (.rvt, .rfa, .adt). Got: ${ext}`));
     }
   }
 });
@@ -89,7 +126,7 @@ app.get('/health', asyncHandler(async (_req, res) => {
 // AI EVALUATION ENDPOINT
 // =============================================
 
-app.post('/evaluate', upload.array('images', 3), asyncHandler(async (req, res) => {
+app.post('/evaluate', uploadImages.array('images', 3), asyncHandler(async (req, res) => {
   const { studentId, courseCode, selfDescription } = req.body;
   const files = Array.isArray(req.files) ? req.files : [];
 
@@ -121,10 +158,19 @@ app.post('/evaluate', upload.array('images', 3), asyncHandler(async (req, res) =
     const ext = path.extname(f.originalname).toLowerCase();
     let mimeType = 'image/jpeg'; // default
     
+    // Only allow image formats for Gemini Vision
+    const allowedImageFormats = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+    if (!allowedImageFormats.includes(ext)) {
+      Logger.warn('EVALUATE', `Invalid image format: ${ext}. File: ${f.originalname}`);
+      throw Errors.BadRequest(`Invalid image format: ${ext}. Allowed: jpg, jpeg, png, webp, gif`);
+    }
+    
     if (ext === '.png') mimeType = 'image/png';
     else if (ext === '.webp') mimeType = 'image/webp';
     else if (ext === '.gif') mimeType = 'image/gif';
     else if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
+    
+    Logger.info('EVALUATE', `Processing image: ${f.originalname} (${mimeType})`);
     
     return {
       data: f.buffer.toString('base64'),
@@ -161,7 +207,7 @@ app.post('/evaluate', upload.array('images', 3), asyncHandler(async (req, res) =
  * POST /convert
  * Upload Revit files, analyze, and submit conversion jobs
  */
-app.post('/convert', upload.array('images', 3), asyncHandler(async (req, res) => {
+app.post('/convert', uploadRevit.array('images', 3), asyncHandler(async (req, res) => {
   const { studentId, courseCode } = req.body;
   const files = Array.isArray(req.files) ? req.files : [];
 
@@ -339,7 +385,7 @@ app.get('/convert/:jobId/:format', asyncHandler(async (req, res) => {
  * POST /analyze
  * Analyze Revit file without conversion
  */
-app.post('/analyze', upload.array('images', 3), asyncHandler(async (req, res) => {
+app.post('/analyze', uploadRevit.array('images', 3), asyncHandler(async (req, res) => {
   const files = Array.isArray(req.files) ? req.files : [];
 
   Logger.info('ANALYZE', `Analyzing ${files.length} file(s)`);
