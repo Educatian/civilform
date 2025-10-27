@@ -6,7 +6,9 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "mock": "node src/mock-server.js",
+    "mock:dev": "nodemon src/mock-server.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
