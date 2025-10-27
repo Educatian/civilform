@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import LoginStep from '@/components/LoginStep'
-import RubricStep from '@/components/RubricStep'
 import UploadStep from '@/components/UploadStep'
 import ResultsStep from '@/components/ResultsStep'
 import { useEvaluationStore } from '@/lib/store'
@@ -10,14 +9,13 @@ import { evaluateRevitModel } from '@/lib/api'
 
 export default function Home() {
   const [currentStep, setCurrentStep] = useState<
-    'login' | 'rubric' | 'upload' | 'evaluating' | 'results'
+    'login' | 'upload' | 'evaluating' | 'results'
   >('login')
 
   const {
     studentId,
     courseCode,
     selfDescription,
-    selectedRubrics,
     uploadedImages,
     isLoading,
     error,
@@ -36,7 +34,7 @@ export default function Home() {
         studentId,
         courseCode,
         selfDescription,
-        checklist: selectedRubrics,
+        checklist: {}, // Empty checklist - rubric step removed
         images: uploadedImages,
       })
 
@@ -65,18 +63,17 @@ export default function Home() {
             <div className="flex items-center justify-between">
               {[
                 { step: 'login', label: 'Login', icon: '👤' },
-                { step: 'rubric', label: 'Select Rubrics', icon: '✓' },
-                { step: 'upload', label: 'Upload', icon: '📁' },
-                { step: 'evaluating', label: 'Evaluating', icon: '⚙️' },
+                { step: 'upload', label: 'Upload Revit', icon: '📄' },
+                { step: 'evaluating', label: 'Analyzing', icon: '⚙️' },
               ].map((item, idx, arr) => (
                 <div key={item.step} className="flex items-center flex-1">
                   <div
                     className={`flex items-center justify-center w-12 h-12 rounded-full text-lg font-semibold ${
                       currentStep === item.step
                         ? 'bg-blue-600 text-white ring-4 ring-blue-200'
-                        : ['login', 'rubric', 'upload'].includes(currentStep) &&
-                            ['login', 'rubric', 'upload'].indexOf(currentStep) >
-                              ['login', 'rubric', 'upload'].indexOf(
+                        : ['login', 'upload'].includes(currentStep) &&
+                            ['login', 'upload'].indexOf(currentStep) >
+                              ['login', 'upload'].indexOf(
                                 item.step as string
                               )
                           ? 'bg-green-600 text-white'
@@ -91,8 +88,8 @@ export default function Home() {
                   {idx < arr.length - 1 && (
                     <div
                       className={`h-1 flex-1 mx-4 rounded-full ${
-                        ['login', 'rubric', 'upload'].indexOf(currentStep) >
-                        ['login', 'rubric', 'upload'].indexOf(item.step as string)
+                        ['login', 'upload'].indexOf(currentStep) >
+                        ['login', 'upload'].indexOf(item.step as string)
                           ? 'bg-green-600'
                           : 'bg-gray-200'
                       }`}
@@ -108,14 +105,7 @@ export default function Home() {
       {/* Step Content */}
       <div className="min-h-[calc(100vh-200px)]">
         {currentStep === 'login' && (
-          <LoginStep onNext={() => setCurrentStep('rubric')} />
-        )}
-
-        {currentStep === 'rubric' && (
-          <RubricStep
-            onNext={() => setCurrentStep('upload')}
-            onBack={() => setCurrentStep('login')}
-          />
+          <LoginStep onNext={() => setCurrentStep('upload')} />
         )}
 
         {currentStep === 'upload' && (
@@ -124,7 +114,7 @@ export default function Home() {
               setCurrentStep('evaluating')
               handleStartEvaluation()
             }}
-            onBack={() => setCurrentStep('rubric')}
+            onBack={() => setCurrentStep('login')}
           />
         )}
 
@@ -135,10 +125,10 @@ export default function Home() {
                 <span className="text-3xl">⚙️</span>
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                AI Evaluation in Progress...
+                AI Analysis in Progress...
               </h2>
               <p className="text-gray-600">
-                Gemini is analyzing your project. Please wait.
+                Gemini is analyzing your Revit model. Please wait.
               </p>
             </div>
           </div>
