@@ -6,6 +6,7 @@ export interface EvaluationState {
   selfDescription: string
   selectedRubrics: Record<string, boolean>
   uploadedImages: File[]
+  uploadMode: 'analysis' | 'evaluation'
   evaluationResult: any
   isLoading: boolean
   error: string | null
@@ -15,6 +16,7 @@ export interface EvaluationState {
   setSelfDescription: (desc: string) => void
   toggleRubric: (rubricId: string) => void
   setUploadedImages: (images: File[]) => void
+  setUploadMode: (mode: 'analysis' | 'evaluation') => void
   setEvaluationResult: (result: any) => void
   setIsLoading: (loading: boolean) => void
   setError: (error: string | null) => void
@@ -27,6 +29,7 @@ export const useEvaluationStore = create<EvaluationState>((set) => ({
   selfDescription: '',
   selectedRubrics: {},
   uploadedImages: [],
+  uploadMode: 'evaluation',
   evaluationResult: null,
   isLoading: false,
   error: null,
@@ -42,6 +45,7 @@ export const useEvaluationStore = create<EvaluationState>((set) => ({
       },
     })),
   setUploadedImages: (images) => set({ uploadedImages: images }),
+  setUploadMode: (mode) => set({ uploadMode: mode }),
   setEvaluationResult: (result) => set({ evaluationResult: result }),
   setIsLoading: (loading) => set({ isLoading: loading }),
   setError: (error) => set({ error }),
@@ -52,6 +56,7 @@ export const useEvaluationStore = create<EvaluationState>((set) => ({
       selfDescription: '',
       selectedRubrics: {},
       uploadedImages: [],
+      uploadMode: 'evaluation',
       evaluationResult: null,
       isLoading: false,
       error: null,

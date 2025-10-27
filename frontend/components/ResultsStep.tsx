@@ -20,22 +20,30 @@ const getRiskColor = (risk: string) => {
 }
 
 export default function ResultsStep({ onReset }: ResultsStepProps) {
-  const { evaluationResult, studentId, courseCode } = useEvaluationStore()
+  const { evaluationResult, studentId, courseCode, uploadMode } = useEvaluationStore()
 
   if (!evaluationResult) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
           <p className="text-slate-600">Unable to load results.</p>
+          <button
+            onClick={onReset}
+            className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Start New Evaluation
+          </button>
         </div>
       </div>
     )
   }
 
+  const isAnalysisMode = uploadMode === 'analysis'
   const score = evaluationResult.score || 0
   const scorePercentage = Math.round((score / 100) * 100)
   const feedback = evaluationResult.aiFeedback || {}
-  const analysis = feedback.analysis || {}
+  const analyses = isAnalysisMode ? feedback.analyses || [] : []
+  const analysis = !isAnalysisMode ? feedback.analysis || {} : (analyses[0] || {})
   const metadata = analysis.metadata || {}
   const structure = analysis.structure || {}
   const bimCompliance = analysis.bimCompliance || {}
@@ -49,19 +57,20 @@ export default function ResultsStep({ onReset }: ResultsStepProps) {
         {/* Header */}
         <div className="mb-12">
           <h1 className="text-5xl font-light text-slate-900 mb-2">
-            Evaluation Results
+            {isAnalysisMode ? 'Revit File Analysis' : 'Evaluation Results'}
           </h1>
           <p className="text-slate-500 text-lg">
             <span className="font-medium">{studentId}</span> • <span className="font-medium">{courseCode}</span>
           </p>
           {analysis.fileName && (
             <p className="text-slate-400 text-sm mt-3">
-              {analysis.fileName}
+              📄 {analysis.fileName}
             </p>
           )}
         </div>
 
         {/* Main Score Card */}
+        {!isAnalysisMode && (
         <div className="mb-12 bg-slate-50 rounded-2xl p-8 border border-slate-200">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
             {/* Score Circle */}
@@ -139,6 +148,7 @@ export default function ResultsStep({ onReset }: ResultsStepProps) {
             </div>
           </div>
         </div>
+        )}
 
         {/* Category Scores */}
         {Object.keys(categoryScores).length > 0 && (

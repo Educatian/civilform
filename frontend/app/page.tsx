@@ -5,7 +5,7 @@ import LoginStep from '@/components/LoginStep'
 import UploadStep from '@/components/UploadStep'
 import ResultsStep from '@/components/ResultsStep'
 import { useEvaluationStore } from '@/lib/store'
-import { evaluateRevitModel } from '@/lib/api'
+import { evaluateRevitModel, analyzeRevitFiles } from '@/lib/api'
 
 export default function Home() {
   const [currentStep, setCurrentStep] = useState<
@@ -17,6 +17,7 @@ export default function Home() {
     courseCode,
     selfDescription,
     uploadedImages,
+    uploadMode,
     isLoading,
     error,
     setIsLoading,
@@ -30,13 +31,38 @@ export default function Home() {
     setError(null)
 
     try {
-      const result = await evaluateRevitModel({
-        studentId,
-        courseCode,
-        selfDescription,
-        checklist: {}, // Empty checklist - rubric step removed
-        images: uploadedImages,
-      })
+      let result: any
+      
+      if (uploadMode === 'analysis') {
+        // RVT file analysis mode
+        result = await analyzeRevitFiles(
+          uploadedImages,
+          studentId,
+          courseCode,
+          selfDescription
+        )
+        
+        // Convert analysis format to match evaluation response format
+        result = {
+          ok: true,
+          score: null,
+          strengths: [],
+          weaknesses: [],
+          aiFeedback: result,
+          modelImages: [],
+          docId: `analysis_${studentId}_${Date.now()}`,
+          timestamp: new Date().toISOString()
+        }
+      } else {
+        // Image evaluation mode
+        result = await evaluateRevitModel({
+          studentId,
+          courseCode,
+          selfDescription,
+          checklist: {}, // Empty checklist - rubric step removed
+          images: uploadedImages,
+        })
+      }
 
       setEvaluationResult(result)
       setCurrentStep('results')
