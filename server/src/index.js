@@ -116,10 +116,21 @@ app.post('/evaluate', upload.array('images', 3), asyncHandler(async (req, res) =
   }
 
   // Convert file buffers to image data for Gemini
-  const imageData = files.map(f => ({
-    data: f.buffer.toString('base64'),
-    mimeType: 'image/jpeg' // Adjust based on actual file type
-  }));
+  const imageData = files.map(f => {
+    // Detect MIME type based on file extension
+    const ext = path.extname(f.originalname).toLowerCase();
+    let mimeType = 'image/jpeg'; // default
+    
+    if (ext === '.png') mimeType = 'image/png';
+    else if (ext === '.webp') mimeType = 'image/webp';
+    else if (ext === '.gif') mimeType = 'image/gif';
+    else if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
+    
+    return {
+      data: f.buffer.toString('base64'),
+      mimeType
+    };
+  });
 
   // Call Gemini Vision for AI feedback
   Logger.info('EVALUATE', 'Calling Gemini Vision API...');
