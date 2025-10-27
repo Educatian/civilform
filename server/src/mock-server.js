@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
+const RubricEvaluator = require('./lib/rubric-evaluator');
 
 const app = express();
 app.use(cors());
@@ -18,12 +19,12 @@ const upload = multer({
     fileSize: 50 * 1024 * 1024 // 50 MB per file
   },
   fileFilter: (_req, file, cb) => {
-    const allowed = ['.rvt', '.rfa', '.adt'];
+    const allowed = ['.rvt', '.rfa', '.adt', '.png', '.jpg', '.jpeg', '.webp'];
     const ext = path.extname(file.originalname).toLowerCase();
     if (allowed.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Only Revit files are allowed (.rvt, .rfa, .adt).'));
+      cb(new Error('Only Revit files and images are allowed.'));
     }
   }
 });
@@ -31,76 +32,70 @@ const upload = multer({
 // In-memory storage for conversion jobs
 const conversionJobs = new Map();
 
+// =============================================
+// HEALTH CHECK
+// =============================================
+
 app.get('/health', (_req, res) => {
   res.json({ ok: true, message: 'Mock server is running' });
 });
 
-// Mock POST /evaluate endpoint
+// =============================================
+// AI EVALUATION WITH RUBRIC
+// =============================================
+
 app.post('/evaluate', upload.array('images', 3), async (req, res) => {
   try {
-    const { studentId, courseCode, selfDescription } = req.body;
+    const { studentId, courseCode, selfDescription, checklist } = req.body;
     const files = Array.isArray(req.files) ? req.files : [];
 
-    console.log('\n[MOCK] /evaluate request received');
-    console.log(`[MOCK] Student ID: ${studentId}`);
-    console.log(`[MOCK] Course: ${courseCode}`);
-    console.log(`[MOCK] Description length: ${selfDescription?.length || 0} chars`);
-    console.log(`[MOCK] Files uploaded: ${files.length}`);
+    console.log('\n[RUBRIC EVAL] /evaluate request received');
+    console.log(`[RUBRIC EVAL] Student ID: ${studentId}`);
+    console.log(`[RUBRIC EVAL] Course: ${courseCode}`);
+    console.log(`[RUBRIC EVAL] Description length: ${selfDescription?.length || 0} chars`);
+    console.log(`[RUBRIC EVAL] Files uploaded: ${files.length}`);
+    console.log(`[RUBRIC EVAL] Checklist items: ${checklist ? Object.keys(JSON.parse(typeof checklist === 'string' ? checklist : JSON.stringify(checklist))).length : 0}`);
 
-    if (!studentId) {
-      return res.status(400).json({ error: 'studentId is required' });
+    // Parse checklist if it's a string
+    let checklistData = {};
+    if (checklist) {
+      checklistData = typeof checklist === 'string' ? JSON.parse(checklist) : checklist;
     }
 
-    // Simulate Gemini analysis delay
-    console.log('[MOCK] Simulating AI analysis (2 seconds)...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // Mock AI feedback
-    const mockFeedback = {
-      score: Math.floor(Math.random() * 30) + 70, // 70-100
-      strengths: [
-        'Good structural element organization',
-        'Proper use of Revit families and components',
-        'Clear and consistent naming conventions',
-        'Well-organized project structure and hierarchy'
-      ],
-      weaknesses: [
-        'Some missing parameters in family definitions',
-        'Could improve Level of Detail (LOD) consistency',
-        'Minor coordination issues between disciplines'
-      ],
-      improvement_steps: [
-        'Add additional shared parameters to enhance data richness across the model',
-        'Review and standardize LOD specifications across all element types',
-        'Perform comprehensive clash detection and resolve any remaining conflicts',
-        'Document design assumptions and document modeling approach in BIM execution plan'
-      ],
-      technical_risk: ['low', 'medium', 'high'][Math.floor(Math.random() * 3)]
-    };
-
-    // Mock storage URLs
-    const modelImages = files.map((f, i) => 
-      `https://storage.example.com/mock/${studentId}/${Date.now()}_${i}_${f.originalname}`
+    // Perform actual rubric-based evaluation (NOT hardcoded)
+    console.log('[RUBRIC EVAL] Performing rubric-based evaluation...');
+    const evaluation = RubricEvaluator.evaluateWithChecklist(
+      selfDescription || '',
+      checklistData,
+      studentId
     );
 
+    // Add metadata
     const responseData = {
       ok: true,
-      score: mockFeedback.score,
-      strengths: mockFeedback.strengths,
-      weaknesses: mockFeedback.weaknesses,
-      aiFeedback: mockFeedback,
-      modelImages: modelImages,
-      docId: `mock_${studentId}_${Date.now()}`,
+      score: evaluation.totalScore,
+      grade: evaluation.grade,
+      strengths: evaluation.strengths,
+      weaknesses: evaluation.weaknesses,
+      aiFeedback: evaluation,
+      recommendations: evaluation.recommendations,
+      categoryScores: evaluation.categoryScores,
+      riskLevel: evaluation.riskLevel,
+      modelImages: files.map((f, i) => 
+        `https://storage.example.com/mock/${studentId}/${Date.now()}_${i}_${f.originalname}`
+      ),
+      docId: `rubric_eval_${studentId}_${Date.now()}`,
       timestamp: new Date().toISOString()
     };
 
-    console.log(`[MOCK] ✅ Analysis complete - Score: ${responseData.score}/100`);
-    console.log(`[MOCK] Risk Level: ${mockFeedback.technical_risk}`);
-    console.log('[MOCK] Response sent to client\n');
+    console.log(`[RUBRIC EVAL] ✅ Evaluation complete`);
+    console.log(`[RUBRIC EVAL] Total Score: ${evaluation.totalScore}/100`);
+    console.log(`[RUBRIC EVAL] Grade: ${evaluation.grade}`);
+    console.log(`[RUBRIC EVAL] Risk Level: ${evaluation.riskLevel}\n`);
 
     res.json(responseData);
   } catch (err) {
-    console.error('[MOCK] ❌ Evaluation error:', err.message);
+    console.error('[RUBRIC EVAL] ❌ Evaluation error:', err.message);
     res.status(500).json({ 
       error: 'Evaluation failed', 
       details: err.message,

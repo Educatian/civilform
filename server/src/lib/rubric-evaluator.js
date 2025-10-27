@@ -586,6 +586,46 @@ class RubricEvaluator {
     if (score >= 60) return 'D';
     return 'F';
   }
+
+  /**
+   * Public API: Evaluate using checklist (V1 MVP)
+   * Simpler interface for immediate use
+   */
+  static evaluateWithChecklist(selfDescription, checklist, studentId = 'unknown') {
+    try {
+      const evaluation = this.evaluateProjectV1({
+        studentId,
+        courseCode: 'CE-EVAL',
+        selfDescription,
+        checklist,
+        images: [],
+        submissionTime: new Date().toISOString()
+      });
+
+      // Format response for API
+      return {
+        ok: true,
+        totalScore: evaluation.totalScore,
+        score: evaluation.totalScore,
+        grade: this._getGrade(evaluation.totalScore),
+        strengths: evaluation.strengths || [],
+        weaknesses: evaluation.weaknesses || [],
+        recommendations: evaluation.recommendations || [],
+        categoryScores: Object.keys(evaluation.rubricScores).reduce((acc, key) => {
+          acc[key] = evaluation.rubricScores[key].sectionScore;
+          return acc;
+        }, {}),
+        riskLevel: evaluation.totalScore >= 80 ? 'low' : evaluation.totalScore >= 70 ? 'medium' : 'high',
+        fatalFaults: evaluation.fatalFaults,
+        srlAnalysis: evaluation.srlAnalysis,
+        version: 'V1',
+        timestamp: new Date().toISOString()
+      };
+    } catch (err) {
+      console.error('[RUBRIC-EVALUATOR] evaluateWithChecklist error:', err);
+      throw err;
+    }
+  }
 }
 
 module.exports = RubricEvaluator;
