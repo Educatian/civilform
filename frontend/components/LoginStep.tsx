@@ -62,17 +62,20 @@ export default function LoginStep({ onNext }: LoginStepProps) {
             >
               Course Code
             </label>
-            <select
-              id="courseCode"
-              value={courseCode}
-              onChange={(e) => setCourseCode(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="">Select a course</option>
-              <option value="CE301">CE 301 - BIM Design</option>
-              <option value="CE302">CE 302 - Advanced BIM</option>
-              <option value="CE401">CE 401 - Civil Design Project</option>
-            </select>
+            <div suppressHydrationWarning>
+              <select
+                id="courseCode"
+                value={courseCode}
+                onChange={(e) => setCourseCode(e.target.value)}
+                suppressHydrationWarning
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">Select a course</option>
+                <option value="CE301">CE 301 - BIM Design</option>
+                <option value="CE302">CE 302 - Advanced BIM</option>
+                <option value="CE401">CE 401 - Civil Design Project</option>
+              </select>
+            </div>
           </div>
 
           <button
