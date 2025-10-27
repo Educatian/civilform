@@ -28,12 +28,14 @@ const upload = multer({
   }
 });
 
+// In-memory storage for conversion jobs
+const conversionJobs = new Map();
+
 app.get('/health', (_req, res) => {
   res.json({ ok: true, message: 'Mock server is running' });
 });
 
 // Mock POST /evaluate endpoint
-// Note: multer field name is 'images' to match frontend FormData
 app.post('/evaluate', upload.array('images', 3), async (req, res) => {
   try {
     const { studentId, courseCode, selfDescription } = req.body;
@@ -53,7 +55,7 @@ app.post('/evaluate', upload.array('images', 3), async (req, res) => {
     console.log('[MOCK] Simulating AI analysis (2 seconds)...');
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // Mock AI feedback with random variations
+    // Mock AI feedback
     const mockFeedback = {
       score: Math.floor(Math.random() * 30) + 70, // 70-100
       strengths: [
@@ -107,6 +109,139 @@ app.post('/evaluate', upload.array('images', 3), async (req, res) => {
   }
 });
 
+// Model Derivative API endpoints
+
+// POST /convert - Submit conversion job
+app.post('/convert', upload.array('images', 3), async (req, res) => {
+  try {
+    const { studentId, courseCode } = req.body;
+    const files = Array.isArray(req.files) ? req.files : [];
+
+    console.log('\n[DERIVATIVE] /convert request received');
+    console.log(`[DERIVATIVE] Files to convert: ${files.length}`);
+
+    if (files.length === 0) {
+      return res.status(400).json({ error: 'At least one file is required' });
+    }
+
+    // Create mock conversion jobs
+    const jobs = files.map((file, idx) => {
+      const jobId = `job_${studentId}_${Date.now()}_${idx}`;
+      const urn = Buffer.from(`revit_files/${file.originalname}-${Date.now()}`).toString('base64');
+      
+      conversionJobs.set(jobId, {
+        filenam: file.originalname,
+        urn,
+        status: 'submitted',
+        createdAt: Date.now(),
+        formats: ['ifc', 'pdf']
+      });
+
+      return {
+        jobId,
+        fileName: file.originalname,
+        urn,
+        status: 'submitted'
+      };
+    });
+
+    console.log(`[DERIVATIVE] ✅ ${jobs.length} conversion jobs created`);
+    console.log('[DERIVATIVE] Response sent to client\n');
+
+    res.json({
+      ok: true,
+      jobs,
+      message: 'Files submitted for conversion'
+    });
+  } catch (err) {
+    console.error('[DERIVATIVE] ❌ Conversion error:', err.message);
+    res.status(500).json({ error: 'Conversion failed', details: err.message });
+  }
+});
+
+// GET /convert/:jobId - Check conversion status
+app.get('/convert/:jobId', (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const job = conversionJobs.get(jobId);
+
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    // Simulate conversion progress (2-5 seconds)
+    const elapsed = Date.now() - job.createdAt;
+    let status = 'pending';
+    let progress = 0;
+
+    if (elapsed > 5000) {
+      status = 'completed';
+      progress = 100;
+    } else if (elapsed > 3000) {
+      status = 'processing';
+      progress = 70;
+    } else if (elapsed > 1000) {
+      status = 'processing';
+      progress = 40;
+    } else {
+      status = 'submitted';
+      progress = 10;
+    }
+
+    const response = {
+      jobId,
+      fileName: job.fileName,
+      urn: job.urn,
+      status,
+      progress,
+      formats: status === 'completed' ? {
+        ifc: `https://storage.example.com/converted/${jobId}.ifc`,
+        pdf: `https://storage.example.com/converted/${jobId}.pdf`
+      } : null,
+      message: status === 'completed' ? 'Conversion complete' : `Conversion ${status} (${progress}%)`
+    };
+
+    console.log(`[DERIVATIVE] ✅ Status check: ${status} (${progress}%)`);
+    res.json(response);
+  } catch (err) {
+    console.error('[DERIVATIVE] ❌ Status check error:', err.message);
+    res.status(500).json({ error: 'Status check failed', details: err.message });
+  }
+});
+
+// GET /convert/:jobId/:format - Download converted file
+app.get('/convert/:jobId/:format', (req, res) => {
+  try {
+    const { jobId, format } = req.params;
+    const job = conversionJobs.get(jobId);
+
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    const elapsed = Date.now() - job.createdAt;
+    if (elapsed < 5000) {
+      return res.status(202).json({ 
+        error: 'Conversion still in progress',
+        status: 'processing'
+      });
+    }
+
+    // Mock file download
+    const mockContent = `Mock ${format.toUpperCase()} file for ${job.fileName}`;
+    const fileName = `${job.fileName.replace(/\.[^.]*$/, '')}.${format}`;
+
+    console.log(`[DERIVATIVE] ✅ Downloading ${format}: ${fileName}`);
+
+    res.setHeader('Content-Type', format === 'pdf' ? 'application/pdf' : 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(mockContent);
+  } catch (err) {
+    console.error('[DERIVATIVE] ❌ Download error:', err.message);
+    res.status(500).json({ error: 'Download failed', details: err.message });
+  }
+});
+
 // Error handling middleware
 app.use((err, _req, res, _next) => {
   console.error('[ERROR]', err);
@@ -119,6 +254,10 @@ app.use((err, _req, res, _next) => {
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`\n🚀 Mock Evaluation Server running on http://localhost:${PORT}`);
-  console.log(`📝 Endpoint: POST http://localhost:${PORT}/evaluate`);
+  console.log(`📝 Endpoints:`);
+  console.log(`   - POST http://localhost:${PORT}/evaluate (AI Evaluation)`);
+  console.log(`   - POST http://localhost:${PORT}/convert (Revit → IFC/PDF)`);
+  console.log(`   - GET http://localhost:${PORT}/convert/:jobId (Status)`);
+  console.log(`   - GET http://localhost:${PORT}/convert/:jobId/:format (Download)`);
   console.log(`💚 Health: GET http://localhost:${PORT}/health\n`);
 });
