@@ -34,6 +34,7 @@ export default function LoginStep({ onNext }: LoginStepProps) {
             e.preventDefault()
             handleNext()
           }}
+          suppressHydrationWarning
           className="space-y-6"
         >
           <div>
