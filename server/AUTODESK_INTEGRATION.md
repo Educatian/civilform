@@ -4,59 +4,54 @@ Convert Revit RVT files to IFC and PDF formats using Autodesk's Model Derivative
 
 ## Overview
 
-This integration uses:
-- **Autodesk Forge Authentication** - OAuth 2.0
+This integration uses [Autodesk Platform Services (APS)](https://aps.autodesk.com):
+- **Autodesk Authentication** - OAuth 2.0
 - **Object Storage Service (OSS)** - Upload files
 - **Model Derivative API** - Submit conversion jobs
-- **Webhook (Optional)** - Monitor job completion
 
 ## Setup
 
-### 1. Get Autodesk Credentials
+### 1. Create Autodesk Developer Account
 
-Visit: https://forge.autodesk.com/en/docs/oauth/v2/tutorials/create-app/
+Visit: https://aps.autodesk.com/en/docs/oauth/v2/tutorials/create-app/
 
-1. Sign in to Autodesk Forge
-2. Create a new **3-legged OAuth App**
+1. Go to [Autodesk Developer Portal](https://forge.autodesk.com)
+2. Create a **3-legged OAuth App** (for user authentication) OR **2-legged OAuth App** (for service accounts)
 3. Copy: **Client ID** and **Client Secret**
 4. Set Callback URL: `http://localhost:3000/callback` (for local development)
 
-### 2. Create OSS Bucket
-
-```bash
-# Create bucket via Postman or curl
-POST https://developer.api.autodesk.com/oss/v2/buckets
-
-Authorization: Bearer {access_token}
-Content-Type: application/json
-
-{
-  "bucketKey": "civilfo-bucket-{timestamp}",
-  "policyKey": "temporary"
-}
-```
-
-### 3. Configure Environment
+### 2. Configure Environment
 
 Update `server/.env`:
 
 ```env
 AUTODESK_CLIENT_ID=your_client_id
 AUTODESK_CLIENT_SECRET=your_client_secret
-AUTODESK_OSS_BUCKET_KEY=civilfo-bucket-xxx
+AUTODESK_OSS_BUCKET_KEY=civilfo-bucket-unique-name
 ```
+
+**Bucket Key Requirements:**
+- Must be globally unique across all Autodesk users
+- 3-128 characters
+- Lowercase letters, numbers, hyphens only
+- Format: `civilfo-bucket-{timestamp}` or `civilfo-bucket-{org-code}`
 
 ## API Usage
 
-### Upload & Convert RVT to IFC/PDF
+### 1. Upload RVT to Cloud Storage
 
 ```bash
-# POST /convert
+# Using the backend endpoint
 curl -X POST http://localhost:4000/convert \
   -F "images=@project.rvt" \
   -F "studentId=20201234" \
   -F "courseCode=CE301"
 ```
+
+This will:
+1. Upload to OSS bucket
+2. Get URN (Base64 encoded path)
+3. Return jobId for status tracking
 
 **Response:**
 ```json
@@ -64,19 +59,64 @@ curl -X POST http://localhost:4000/convert \
   "ok": true,
   "jobs": [
     {
-      "jobId": "job_20201234_1729999999_0",
+      "jobId": "job_20201234_..._0",
       "fileName": "project.rvt",
-      "urn": "dXJuOmFkc2sud2lwcHI6ZnM...",
+      "urn": "dXJuOmFkc2sub3NzOm9iamVjdC9j...",
       "status": "submitted"
     }
   ]
 }
 ```
 
-### Check Conversion Status
+### 2. Submit Conversion Job
+
+Reference: [POST /designdata/job](https://aps.autodesk.com/en/docs/model-derivative/v2/reference/http/job/post-job/)
+
+**IFC Conversion with Settings:**
+
+The API supports these Revit IFC export settings:
+- `IFC2x3 Coordination View 2.0` (Default)
+- `IFC2x3 Coordination View`
+- `IFC2x3 GSA Concept Design BIM 2010`
+- `IFC2x3 Basic FM Handover View`
+- `IFC2x2 Coordination View`
+- `IFC2x2 Singapore BCA e-Plan Check`
+- `IFC2x3 Extended FM Handover View`
+- `IFC4 Reference View`
+- `IFC4 Design Transfer View`
+
+**Example Request:**
+```bash
+curl -X POST https://developer.api.autodesk.com/modelderivative/v2/designdata/job \
+  -H "Authorization: Bearer {ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -H "x-ads-force: true" \
+  -d '{
+    "input": {
+      "urn": "dXJuOmFkc2suY... (Base64 encoded)"
+    },
+    "output": {
+      "formats": [
+        {
+          "type": "ifc",
+          "advanced": {
+            "exportSettingName": "IFC4 Reference View"
+          }
+        },
+        {
+          "type": "pdf",
+          "views": ["2d", "3d"]
+        }
+      ]
+    }
+  }'
+```
+
+### 3. Check Conversion Status
+
+Reference: [GET /designdata/{urn}/manifest](https://aps.autodesk.com/en/docs/model-derivative/v2/reference/http/designdata-urn-manifest/get-designdata-urn-manifest/)
 
 ```bash
-# GET /convert/:jobId
 curl http://localhost:4000/convert/job_20201234_1729999999_0
 ```
 
@@ -84,65 +124,145 @@ curl http://localhost:4000/convert/job_20201234_1729999999_0
 ```json
 {
   "jobId": "job_20201234_1729999999_0",
-  "status": "processing",
+  "status": "inprogress",
   "progress": 60,
-  "message": "Conversion processing (60%)",
-  "formats": null  // Will be populated when status = "completed"
+  "message": "Conversion processing (60%)"
 }
 ```
 
 **Status Values:**
-- `submitted` - Job accepted (0-10%)
-- `processing` - Converting (40-70%)
-- `completed` - Ready for download (100%)
+- `submitted` - Job accepted (Autodesk queued)
+- `inprogress` - Converting (0-100% progress)
+- `completed` - Ready for download
+- `failed` - Error during conversion
 
-### Download Converted File
+### 4. Download Converted Files
 
 ```bash
-# GET /convert/:jobId/ifc
+# IFC format
 curl http://localhost:4000/convert/job_20201234_1729999999_0/ifc \
   -o project.ifc
 
-# GET /convert/:jobId/pdf
+# PDF format (2D/3D views)
 curl http://localhost:4000/convert/job_20201234_1729999999_0/pdf \
   -o project.pdf
 ```
 
+## Supported Formats
+
+### Input
+- `.rvt` - Revit Project (Main format)
+- `.rfa` - Revit Family
+- `.adt` - Archive
+
+### Output
+- **IFC** - Industry Foundation Classes (Open BIM standard)
+  - Supports IFC2x2, IFC2x3, IFC4
+  - Maintains structural and spatial information
+  - Essential for BIM coordination
+  
+- **PDF** - 2D/3D views
+  - 2D views from drawing sheets
+  - 3D model visualization
+  - Print-ready format
+
+- **STEP** - CAD exchange format (ISO 10303)
+- **IGES** - Engineering drawing format
+- **SVF** - Simplified Viewer Format (3D web viewing)
+
+## Conversion Times & Quotas
+
+### Typical Times
+- Small project (<50 MB): 30-60 seconds
+- Medium project (50-200 MB): 1-3 minutes
+- Large project (>200 MB): 3-10 minutes
+
+### API Quotas (Free Tier)
+- 50 API calls/day
+- File size: up to 2 GB
+- Job retention: 30 days
+
+### Pricing
+Free tier includes 50 conversions/day. After that:
+- Standard: Pay-per-conversion
+- Enterprise: Volume discounts
+
+[View Pricing](https://aps.autodesk.com/en/pricing)
+
+## Error Handling
+
+### Common Errors
+
+**401 Unauthorized**
+```json
+{ "error": "Invalid access token" }
+```
+→ Regenerate token, check credentials
+
+**404 Not Found (URN)**
+```json
+{ "error": "Requested object was not found" }
+```
+→ Verify URN encoding, ensure file was uploaded successfully
+
+**400 Bad Request**
+```json
+{ "error": "Unsupported file format" }
+```
+→ Use `x-ads-force: true` header to force conversion
+→ Check file isn't corrupted
+
+**409 Conflict (Bucket)**
+```json
+{ "error": "Bucket already exists" }
+```
+→ Bucket key must be globally unique, try different name
+
 ## Production Implementation
 
-### Using Real Autodesk APIs
+### Replace Mock with Real API
 
-Replace mock implementation in `mock-server.js` with real API calls from `src/lib/autodesk.js`:
+In `src/index.js`, instead of mock:
 
 ```javascript
 const {
   getAccessToken,
+  createOSSBucket,
   uploadToOSS,
   submitDerivativeJob,
   checkJobStatus,
-  getDerivativeUrl
+  getDerivativeUrl,
+  deleteFromOSS
 } = require('./lib/autodesk');
 
-// Upload file
-const { bucketKey, objectKey } = await uploadToOSS(
-  bucketKey,
-  'project.rvt',
-  fileBuffer
-);
+// 1. Create bucket (first time)
+const bucket = await createOSSBucket(bucketKey);
 
-// Submit conversion job
-const job = await submitDerivativeJob(bucketKey, objectKey, ['ifc', 'pdf']);
+// 2. Upload file
+const { urn } = await uploadToOSS(bucketKey, 'project.rvt', fileBuffer);
 
-// Poll for completion
-const manifest = await checkJobStatus(job.urn);
+// 3. Submit conversion
+const job = await submitDerivativeJob(urn, ['ifc', 'pdf']);
 
-// Get download URL
-const downloadUrl = await getDerivativeUrl(job.urn, 'ifc');
+// 4. Poll for completion
+let manifest = await checkJobStatus(urn);
+while (manifest.status === 'inprogress') {
+  await new Promise(r => setTimeout(r, 5000)); // Wait 5sec
+  manifest = await checkJobStatus(urn);
+}
+
+// 5. Download
+if (manifest.status === 'success') {
+  const ifcUrl = await getDerivativeUrl(urn, 'ifc');
+}
+
+// 6. Cleanup (optional)
+await deleteFromOSS(bucketKey, objectKey);
 ```
 
-### Webhook for Job Completion
+## Webhook for Async Notifications
 
-Set up webhook to be notified when conversion completes:
+Instead of polling, set up webhook notifications:
 
 ```bash
 POST https://developer.api.autodesk.com/webhooks/v1/systems/derivative/events
@@ -155,89 +275,51 @@ POST https://developer.api.autodesk.com/webhooks/v1/systems/derivative/events
 }
 ```
 
-## Supported Formats
-
-### Input
-- `.rvt` - Revit Project
-- `.rfa` - Revit Family
-- `.adt` - Archive
-
-### Output
-- **IFC** (Industry Foundation Classes) - Open BIM standard
-- **PDF** - 2D/3D views
-- **STEP** - CAD exchange format
-- **IGES** - Engineering drawing format
-
-## Conversion Times
-
-Typical conversion times:
-- Small project (<50 MB): 30-60 seconds
-- Medium project (50-200 MB): 1-3 minutes
-- Large project (>200 MB): 3-10 minutes
-
-## Error Handling
-
-```javascript
-try {
-  const result = await submitDerivativeJob(bucketKey, objectKey);
-} catch (err) {
-  if (err.message.includes('Invalid credentials')) {
-    // Re-authenticate
-  } else if (err.message.includes('Unsupported format')) {
-    // Validate input file format
-  } else {
-    // Handle other errors
-  }
+Endpoint will receive:
+```json
+{
+  "event": "extraction.finish_success",
+  "resourceUrn": "dXJuOmFkc2s...",
+  "status": "success",
+  "derivatives": [{"outputType": "ifc"}, {"outputType": "pdf"}]
 }
 ```
 
-## Quota & Pricing
+## References
 
-- Free tier: 50 API calls/day
-- Standard: Pay-per-conversion after quota
-- Enterprise: Volume discounts
-
-View pricing: https://forge.autodesk.com/en/pricing
+- [OAuth 2.0](https://aps.autodesk.com/en/docs/oauth/v2/reference/http/)
+- [Object Storage Service (OSS)](https://aps.autodesk.com/en/docs/object-storage/v1/reference/http/)
+- [Model Derivative API](https://aps.autodesk.com/en/docs/model-derivative/v2/reference/http/)
+- [RVT to IFC Export Guide](https://aps.autodesk.com/blog/export-ifc-rvt-using-model-derivative-api)
+- [Revit IFC Export Settings](https://knowledge.autodesk.com/support/revit-products/learn-explore/caas/CloudHelp/cloudhelp_9C52B4A8-0DE1-4D6F-87EB-3D084D66E1A9.html)
 
 ## Debugging
 
-### Check API Health
+### API Health Check
 
 ```bash
-curl https://developer.api.autodesk.com/authentication/v2/token \
-  -X POST \
+curl -X POST https://developer.api.autodesk.com/authentication/v2/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "client_id=YOUR_ID&client_secret=YOUR_SECRET&grant_type=client_credentials&scope=data:read"
+  -d "client_id=YOUR_ID&client_secret=YOUR_SECRET&grant_type=client_credentials&scope=data:read%20data:write"
 ```
 
-### View Conversion Logs
+### View Job Status in Real-time
 
-In `mock-server.js` logs:
+```bash
+# Check manifest every second
+while true; do
+  curl -s https://developer.api.autodesk.com/modelderivative/v2/designdata/{URN}/manifest \
+    -H "Authorization: Bearer {TOKEN}" | jq '.status, .progress'
+  sleep 1
+done
+```
+
+### Server Logs
+
+Mock server logs from terminal:
 ```
 [DERIVATIVE] /convert request received
 [DERIVATIVE] Files to convert: 1
 [DERIVATIVE] ✅ 1 conversion jobs created
 [DERIVATIVE] ✅ Status check: processing (60%)
 ```
-
-## References
-
-- [Autodesk Forge Docs](https://developer.autodesk.com/en/docs/forge/v1/overview/)
-- [Model Derivative API](https://developer.autodesk.com/en/docs/model-derivative/v2/overview/)
-- [Authentication OAuth2](https://developer.autodesk.com/en/docs/oauth/v2/overview/)
-- [Revit to IFC Export](https://knowledge.autodesk.com/support/revit-products/learn-explore/caas/CloudHelp/cloudhelp_9C52B4A8-0DE1-4D6F-87EB-3D084D66E1A9.html)
-
-## Testing
-
-Use `npm run mock:dev` to test locally without Autodesk credentials:
-
-```bash
-curl -X POST http://localhost:4000/convert \
-  -F "images=@test.rvt" \
-  -F "studentId=test"
-```
-
-**Mock server simulates:**
-- File upload (instant)
-- Conversion job creation (2-5 sec progress)
-- File download (mock IFC/PDF)
