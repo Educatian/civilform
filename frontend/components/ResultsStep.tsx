@@ -323,25 +323,25 @@ export default function ResultsStep({ onReset }: ResultsStepProps) {
                   BIM Compliance
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {bimCompliance.modelingStandards !== undefined && (
+                  {bimCompliance.modelingStandards?.score !== undefined && (
                     <div className="p-6 bg-blue-50 rounded-xl border border-blue-200">
                       <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Modeling Standards</p>
-                      <p className="text-3xl font-light text-blue-600">{Math.round(bimCompliance.modelingStandards)}</p>
-                      <p className="text-xs text-slate-500 mt-2">/25</p>
+                      <p className="text-3xl font-light text-blue-600">{Math.round(bimCompliance.modelingStandards.score)}</p>
+                      <p className="text-xs text-slate-500 mt-2">/100</p>
                     </div>
                   )}
-                  {bimCompliance.dataStructure !== undefined && (
+                  {bimCompliance.dataStructure?.score !== undefined && (
                     <div className="p-6 bg-blue-50 rounded-xl border border-blue-200">
                       <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Data Structure</p>
-                      <p className="text-3xl font-light text-blue-600">{Math.round(bimCompliance.dataStructure)}</p>
-                      <p className="text-xs text-slate-500 mt-2">/25</p>
+                      <p className="text-3xl font-light text-blue-600">{Math.round(bimCompliance.dataStructure.score)}</p>
+                      <p className="text-xs text-slate-500 mt-2">/100</p>
                     </div>
                   )}
-                  {bimCompliance.documentationQuality !== undefined && (
+                  {bimCompliance.documentationQuality?.score !== undefined && (
                     <div className="p-6 bg-blue-50 rounded-xl border border-blue-200">
                       <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Documentation</p>
-                      <p className="text-3xl font-light text-blue-600">{Math.round(bimCompliance.documentationQuality)}</p>
-                      <p className="text-xs text-slate-500 mt-2">/25</p>
+                      <p className="text-3xl font-light text-blue-600">{Math.round(bimCompliance.documentationQuality.score)}</p>
+                      <p className="text-xs text-slate-500 mt-2">/100</p>
                     </div>
                   )}
                 </div>
@@ -355,30 +355,37 @@ export default function ResultsStep({ onReset }: ResultsStepProps) {
                   Performance Metrics
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {performanceMetrics.estimatedLoadTime && (
+                  {performanceMetrics.estimatedLoadTime?.time && (
                     <div className="p-6 bg-slate-50 rounded-xl border border-slate-200">
                       <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Load Time</p>
-                      <p className="text-2xl font-light text-slate-900">{performanceMetrics.estimatedLoadTime}</p>
+                      <p className="text-2xl font-light text-slate-900">{performanceMetrics.estimatedLoadTime.time}</p>
                     </div>
                   )}
-                  {performanceMetrics.renderingComplexity && (
+                  {performanceMetrics.renderingComplexity?.level && (
                     <div className="p-6 bg-slate-50 rounded-xl border border-slate-200">
                       <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Rendering</p>
-                      <p className="text-2xl font-light text-slate-900">{performanceMetrics.renderingComplexity}</p>
+                      <div className="flex justify-between items-center">
+                        <p className="text-lg font-light text-slate-900">{performanceMetrics.renderingComplexity.level}</p>
+                        <p className="text-sm text-slate-500">Score: {Math.round(performanceMetrics.renderingComplexity.score)}</p>
+                      </div>
                     </div>
                   )}
-                  {performanceMetrics.editingPerformance !== undefined && (
+                  {performanceMetrics.editingPerformance?.score !== undefined && (
                     <div className="p-6 bg-slate-50 rounded-xl border border-slate-200">
                       <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Editing Performance</p>
-                      <p className="text-3xl font-light text-slate-900">{Math.round(performanceMetrics.editingPerformance)}</p>
-                      <p className="text-xs text-slate-500 mt-2">/100</p>
+                      <div className="flex justify-between items-center">
+                        <p className="text-2xl font-light text-slate-900">{Math.round(performanceMetrics.editingPerformance.score)}</p>
+                        <p className="text-xs text-slate-500">{performanceMetrics.editingPerformance.responsiveness}</p>
+                      </div>
                     </div>
                   )}
-                  {performanceMetrics.collaborationFitness !== undefined && (
+                  {performanceMetrics.collaborationFitness?.score !== undefined && (
                     <div className="p-6 bg-slate-50 rounded-xl border border-slate-200">
                       <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Collaboration</p>
-                      <p className="text-3xl font-light text-slate-900">{Math.round(performanceMetrics.collaborationFitness)}</p>
-                      <p className="text-xs text-slate-500 mt-2">/100</p>
+                      <div className="flex justify-between items-center">
+                        <p className="text-2xl font-light text-slate-900">{Math.round(performanceMetrics.collaborationFitness.score)}</p>
+                        <p className="text-xs text-slate-500">{performanceMetrics.collaborationFitness.fitness}</p>
+                      </div>
                     </div>
                   )}
                 </div>
