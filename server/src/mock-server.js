@@ -33,42 +33,45 @@ app.get('/health', (_req, res) => {
 });
 
 // Mock POST /evaluate endpoint
-app.post('/evaluate', upload.array('files', 3), async (req, res) => {
+// Note: multer field name is 'images' to match frontend FormData
+app.post('/evaluate', upload.array('images', 3), async (req, res) => {
   try {
     const { studentId, courseCode, selfDescription } = req.body;
     const files = Array.isArray(req.files) ? req.files : [];
+
+    console.log('\n[MOCK] /evaluate request received');
+    console.log(`[MOCK] Student ID: ${studentId}`);
+    console.log(`[MOCK] Course: ${courseCode}`);
+    console.log(`[MOCK] Description length: ${selfDescription?.length || 0} chars`);
+    console.log(`[MOCK] Files uploaded: ${files.length}`);
 
     if (!studentId) {
       return res.status(400).json({ error: 'studentId is required' });
     }
 
-    console.log(`[MOCK] Evaluating project for student: ${studentId}`);
-    console.log(`[MOCK] Course: ${courseCode}`);
-    console.log(`[MOCK] Description: ${selfDescription.substring(0, 50)}...`);
-    console.log(`[MOCK] Files uploaded: ${files.length}`);
-
     // Simulate Gemini analysis delay
+    console.log('[MOCK] Simulating AI analysis (2 seconds)...');
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // Mock AI feedback
+    // Mock AI feedback with random variations
     const mockFeedback = {
-      score: Math.floor(Math.random() * 40) + 60, // 60-100
+      score: Math.floor(Math.random() * 30) + 70, // 70-100
       strengths: [
         'Good structural element organization',
-        'Proper use of Revit families',
-        'Clear naming conventions',
-        'Well-organized project structure'
+        'Proper use of Revit families and components',
+        'Clear and consistent naming conventions',
+        'Well-organized project structure and hierarchy'
       ],
       weaknesses: [
         'Some missing parameters in family definitions',
-        'Could improve LOD consistency',
-        'Minor coordination issues'
+        'Could improve Level of Detail (LOD) consistency',
+        'Minor coordination issues between disciplines'
       ],
       improvement_steps: [
-        'Add additional parameters to improve data richness',
-        'Review and standardize LOD specifications across all elements',
-        'Perform comprehensive clash detection and resolve conflicts',
-        'Document design assumptions and modeling approach'
+        'Add additional shared parameters to enhance data richness across the model',
+        'Review and standardize LOD specifications across all element types',
+        'Perform comprehensive clash detection and resolve any remaining conflicts',
+        'Document design assumptions and document modeling approach in BIM execution plan'
       ],
       technical_risk: ['low', 'medium', 'high'][Math.floor(Math.random() * 3)]
     };
@@ -89,17 +92,33 @@ app.post('/evaluate', upload.array('files', 3), async (req, res) => {
       timestamp: new Date().toISOString()
     };
 
-    console.log(`[MOCK] Response score: ${responseData.score}`);
+    console.log(`[MOCK] ✅ Analysis complete - Score: ${responseData.score}/100`);
+    console.log(`[MOCK] Risk Level: ${mockFeedback.technical_risk}`);
+    console.log('[MOCK] Response sent to client\n');
+
     res.json(responseData);
   } catch (err) {
-    console.error('[MOCK] Evaluation error:', err);
-    res.status(500).json({ error: 'Evaluation failed', details: err.message });
+    console.error('[MOCK] ❌ Evaluation error:', err.message);
+    res.status(500).json({ 
+      error: 'Evaluation failed', 
+      details: err.message,
+      type: err.name
+    });
   }
+});
+
+// Error handling middleware
+app.use((err, _req, res, _next) => {
+  console.error('[ERROR]', err);
+  res.status(500).json({ 
+    error: 'Server error',
+    message: err.message
+  });
 });
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`\n🚀 Mock Evaluation Server running on http://localhost:${PORT}`);
-  console.log(`📝 Test endpoint: POST http://localhost:${PORT}/evaluate`);
-  console.log(`💚 Health check: GET http://localhost:${PORT}/health\n`);
+  console.log(`📝 Endpoint: POST http://localhost:${PORT}/evaluate`);
+  console.log(`💚 Health: GET http://localhost:${PORT}/health\n`);
 });
