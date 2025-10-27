@@ -57,7 +57,25 @@ export const evaluateRevitModel = async (
     return response.data
   } catch (error) {
     if (axios.isAxiosError(error)) {
-      throw new Error(error.response?.data?.error || error.message)
+      // Extract error message from different possible response structures
+      const errorData = error.response?.data
+      let errorMessage = 'Unknown error occurred'
+      
+      if (typeof errorData === 'object' && errorData !== null) {
+        if (errorData.error?.message) {
+          errorMessage = errorData.error.message
+        } else if (errorData.message) {
+          errorMessage = errorData.message
+        } else if (errorData.details?.error) {
+          errorMessage = errorData.details.error
+        } else {
+          errorMessage = JSON.stringify(errorData)
+        }
+      } else if (typeof errorData === 'string') {
+        errorMessage = errorData
+      }
+      
+      throw new Error(errorMessage || error.message)
     }
     throw error
   }
