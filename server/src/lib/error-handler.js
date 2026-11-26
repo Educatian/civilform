@@ -152,9 +152,9 @@ const errorHandler = (err, req, res, next) => {
     let statusCode = HTTP_STATUS.BAD_REQUEST;
     let message = err.message;
 
-    if (err.code === 'FILE_TOO_LARGE') {
+    if (err.code === 'LIMIT_FILE_SIZE') {
       statusCode = HTTP_STATUS.PAYLOAD_TOO_LARGE;
-      message = 'File size exceeds maximum allowed (100MB)';
+      message = 'File size exceeds the configured maximum allowed';
     } else if (err.code === 'LIMIT_FILE_COUNT') {
       message = 'Too many files. Maximum is 3 files';
     } else if (err.code === 'LIMIT_FIELD_COUNT') {
